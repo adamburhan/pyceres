@@ -89,8 +89,10 @@ struct LogDepthDomain {
 // Monocular depth factor with a per-image affine correction:
 //   r = (h(alpha * depth + beta) - h(z_cam)) / stddev
 // where h is the domain transform and z_cam the third component of the point
-// in the camera frame. Parameter blocks: qvec (x, y, z, w; cam_from_world,
-// use EigenQuaternionManifold), tvec, point3D (world), alpha, beta.
+// in the camera frame. Parameter blocks: cam_from_world (7: quat x, y, z, w,
+// then translation, matching COLMAP's Rigid3d; use
+// ProductManifold(EigenQuaternionManifold, EuclideanManifold(3))),
+// point3D (world), alpha, beta.
 template <typename Domain>
 class MonoDepthError {
  public:
@@ -101,19 +103,20 @@ class MonoDepthError {
 
   static ceres::CostFunction* Create(const double depth, const double stddev) {
     return new ceres::
-        AutoDiffCostFunction<MonoDepthError<Domain>, 1, 4, 3, 3, 1, 1>(
+        AutoDiffCostFunction<MonoDepthError<Domain>, 1, 7, 3, 1, 1>(
             new MonoDepthError<Domain>(depth, stddev));
   }
 
   template <typename T>
-  bool operator()(const T* const qvec,
-                  const T* const tvec,
+  bool operator()(const T* const cam_from_world,
                   const T* const point3D,
                   const T* const alpha,
                   const T* const beta,
                   T* residuals) const {
-    const Eigen::Map<const Eigen::Quaternion<T>> q_cam_from_world(qvec);
-    const Eigen::Map<const Eigen::Matrix<T, 3, 1>> t_cam_from_world(tvec);
+    const Eigen::Map<const Eigen::Quaternion<T>> q_cam_from_world(
+        cam_from_world);
+    const Eigen::Map<const Eigen::Matrix<T, 3, 1>> t_cam_from_world(
+        cam_from_world + 4);
     const Eigen::Map<const Eigen::Matrix<T, 3, 1>> point3D_world(point3D);
     const T z_cam = (q_cam_from_world * point3D_world + t_cam_from_world)(2);
 
@@ -157,19 +160,20 @@ class MonoDepthMaxMixError {
                                      const Eigen::VectorXd& stddevs,
                                      const Eigen::VectorXd& weights) {
     return new ceres::
-        AutoDiffCostFunction<MonoDepthMaxMixError<Domain>, 1, 4, 3, 3, 1, 1>(
+        AutoDiffCostFunction<MonoDepthMaxMixError<Domain>, 1, 7, 3, 1, 1>(
             new MonoDepthMaxMixError<Domain>(depths, stddevs, weights));
   }
 
   template <typename T>
-  bool operator()(const T* const qvec,
-                  const T* const tvec,
+  bool operator()(const T* const cam_from_world,
                   const T* const point3D,
                   const T* const alpha,
                   const T* const beta,
                   T* residuals) const {
-    const Eigen::Map<const Eigen::Quaternion<T>> q_cam_from_world(qvec);
-    const Eigen::Map<const Eigen::Matrix<T, 3, 1>> t_cam_from_world(tvec);
+    const Eigen::Map<const Eigen::Quaternion<T>> q_cam_from_world(
+        cam_from_world);
+    const Eigen::Map<const Eigen::Matrix<T, 3, 1>> t_cam_from_world(
+        cam_from_world + 4);
     const Eigen::Map<const Eigen::Matrix<T, 3, 1>> point3D_world(point3D);
     const T z_cam = (q_cam_from_world * point3D_world + t_cam_from_world)(2);
 
